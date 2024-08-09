@@ -12,6 +12,10 @@ impl Sessions {
         Sessions { storage }
     }
 
+    pub fn configure(&self) -> Result<(), io::Error> {
+        return self.storage.configure()
+    }
+
     pub fn get_or_create_session(&mut self, name: &str) -> Result<Session, io::Error> {
         let mut session = Session {
             name: name.to_string(),

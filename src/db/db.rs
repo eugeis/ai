@@ -29,7 +29,7 @@ impl Db {
             },
             "system.md",
             Default::default()
-        )?;
+        );
 
         let sessions = Sessions::new(
             Storage {
@@ -38,7 +38,7 @@ impl Db {
                 is_dir: false,
                 extension: Some(".json".to_string()),
             }
-        )?;
+        );
 
         let contexts = Contexts::new(
             Storage {
@@ -46,7 +46,7 @@ impl Db {
                 dir: dir_path.join("contexts"),
                 ..Default::default()
             }
-        )?;
+        );
 
         Ok(Db {
             dir: dir_path,
@@ -59,7 +59,6 @@ impl Db {
 
     pub fn configure(&self) -> Result<(), io::Error> {
         fs::create_dir_all(&self.dir)?;
-        self.load_env_file()?;
         self.patterns.configure()?;
         self.sessions.configure()?;
         self.contexts.configure()?;

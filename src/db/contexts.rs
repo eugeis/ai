@@ -11,6 +11,10 @@ impl Contexts {
         Contexts { storage }
     }
 
+    pub fn configure(&self) -> Result<(), io::Error> {
+        return self.storage.configure()
+    }
+
     pub fn get_context(&self, name: &str) -> Result<Context, io::Error> {
         let content = self.storage.load(name)?;
         let content_str = String::from_utf8(content)

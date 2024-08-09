@@ -10,13 +10,15 @@ pub struct Patterns {
 }
 
 impl Patterns {
-    pub fn new(storage: Storage, system_pattern_file: &str, unique_patterns_file_path: PathBuf) -> Result<Self, io::Error> {
-        // Assuming some initialization might fail, use Result here
-        Ok(Patterns {
+    pub fn new(storage: Storage, system_pattern_file: &str, unique_patterns_file_path: PathBuf) -> Self {
+        Patterns {
             storage,
             system_pattern_file: system_pattern_file.to_string(),
             unique_patterns_file_path: PathBuf::from(unique_patterns_file_path),
-        })
+        }
+    }
+    pub fn configure(&self) -> Result<(), io::Error> {
+        return self.storage.configure()
     }
 
     pub fn get_pattern(&self, name: &str) -> Result<Pattern, io::Error> {
