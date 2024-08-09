@@ -1,3 +1,5 @@
+mod db;
+
 use ratatui::{
     backend::{Backend, CrosstermBackend},
     layout::{Constraint, Direction, Layout},

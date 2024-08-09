@@ -6,3 +6,6 @@ edition = "2021"
 [dependencies]
 ratatui = "*"
 crossterm = "*"
+serde = { version = "*", features = ["derive"] }
+serde_json = "*"
+serde_yaml = "*"
