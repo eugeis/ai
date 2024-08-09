@@ -14,6 +14,17 @@ pub struct Storage {
     pub extension: Option<String>,
 }
 
+impl Default for Storage {
+    fn default() -> Self {
+        Self {
+            label: "".to_string(),
+            dir: PathBuf::new(),
+            is_dir: false,
+            extension: None,
+        }
+    }
+}
+
 impl Storage {
     pub fn configure(&self) -> Result<(), io::Error> {
         fs::create_dir_all(&self.dir)?;
