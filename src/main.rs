@@ -1,11 +1,9 @@
-mod db;
-
 use ratatui::{
     backend::{Backend, CrosstermBackend},
     layout::{Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
     text::{Span, Line, Text},
-    widgets::{Block, Borders, List, ListItem, Paragraph, ListState},
+    widgets::{Block, Borders, Paragraph},
     Terminal,
 };
 use crossterm::{
@@ -13,7 +11,6 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use std::fs;
 use std::io::{self, Write};
 use std::time::Duration;
 
@@ -26,17 +23,8 @@ fn main() -> Result<(), io::Error> {
     let mut terminal = Terminal::new(backend)?;
 
     // Application state
-    let mut command_input = String::new();
-    let views = ["Contexts", "Sessions", "Patterns", "Vendors", "Models"];
+    let views = ["Contexts", "Sessions", "Patterns", "Providers", "Models"];
     let mut active_view = 0;
-    let context_files = vec!["file1.txt", "file2.txt", "file3.txt"]; // Replace with actual file names
-    let mut selected_context = 0;
-    let mut list_state = ListState::default(); // Initialize ListState
-    list_state.select(Some(selected_context));
-    let mut file_content = String::new();
-    if let Ok(content) = fs::read_to_string(context_files[selected_context]) {
-        file_content = content;
-    }
 
     loop {
         terminal.draw(|f| {
@@ -45,7 +33,7 @@ fn main() -> Result<(), io::Error> {
                 .direction(Direction::Vertical)
                 .constraints(
                     [
-                        Constraint::Length(3), // Header
+                        Constraint::Length(6), // Combined Header and Actions
                         Constraint::Length(3), // Command line
                         Constraint::Min(0),    // Working space
                     ]
@@ -53,107 +41,71 @@ fn main() -> Result<(), io::Error> {
                 )
                 .split(f.size());
 
-            // Header
-            let header = Paragraph::new(Line::from(views.iter().enumerate().map(|(i, view)| {
-                let style = if i == active_view {
-                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
-                } else {
-                    Style::default()
-                };
-                Span::styled(format!("({}) {}", i + 1, view), style)
-            }).collect::<Vec<_>>()))
+            // Combined Header and Actions
+            let mut header_lines = vec![
+                Line::from(views.iter().enumerate().map(|(i, view)| {
+                    let style = if i == active_view {
+                        Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default()
+                    };
+                    Span::styled(format!("({}) {}", i + 1, view), style)
+                }).collect::<Vec<_>>())
+            ];
+
+            // Add specific actions if "Providers" view is selected
+            if views[active_view] == "Providers" {
+                let actions = vec![
+                    Span::styled("(a) Add", Style::default().fg(Color::Green)),
+                    Span::raw(" | "),
+                    Span::styled("(e) Edit", Style::default().fg(Color::Yellow)),
+                    Span::raw(" | "),
+                    Span::styled("(d) Delete", Style::default().fg(Color::Red)),
+                ];
+                header_lines.push(Line::from(actions));
+            }
+
+            let header = Paragraph::new(header_lines)
                 .block(Block::default().borders(Borders::ALL).title("Header"));
             f.render_widget(header, chunks[0]);
 
             // Command Line
-            let command_line = Paragraph::new(Text::raw(command_input.as_str()))
+            let command_line = Paragraph::new("Command: ")
                 .style(Style::default().fg(Color::Green))
                 .block(Block::default().borders(Borders::ALL).title(": Command Line"));
             f.render_widget(command_line, chunks[1]);
 
             // Workspace
-            match views[active_view] {
-                "Contexts" => {
-                    let cols = Layout::default()
-                        .direction(Direction::Horizontal)
-                        .constraints(
-                            [
-                                Constraint::Percentage(15), // File list column
-                                Constraint::Percentage(85), // File content column
-                            ]
-                                .as_ref(),
-                        )
-                        .split(chunks[2]);
-
-                    // Left column: File list
-                    let items: Vec<ListItem> = context_files.iter().map(|f| {
-                        let content = vec![Line::from(Span::raw(*f))];
-                        ListItem::new(content)
-                    }).collect();
-                    let list = List::new(items)
-                        .block(Block::default().borders(Borders::ALL).title("Contexts"))
-                        .highlight_style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
-                        .highlight_symbol(">> ");
-                    f.render_stateful_widget(list, cols[0], &mut list_state);
-
-                    // Right column: File content
-                    let file_view = Paragraph::new(file_content.as_str())
-                        .block(Block::default().borders(Borders::ALL).title("Content"))
-                        .style(Style::default().fg(Color::White));
-                    f.render_widget(file_view, cols[1]);
-                }
-                _ => {
-                    let workspace = Paragraph::new(format!("This is the {} view", views[active_view]))
-                        .block(Block::default().borders(Borders::ALL).title("Workspace"));
-                    f.render_widget(workspace, chunks[2]);
-                }
-            };
+            let workspace_text = format!("This is the {} view", views[active_view]);
+            let workspace = Paragraph::new(workspace_text)
+                .block(Block::default().borders(Borders::ALL).title("Workspace"));
+            f.render_widget(workspace, chunks[2]);
         })?;
 
         // Handle input
         if event::poll(Duration::from_millis(100))? {
             if let Event::Key(key) = event::read()? {
                 match key.code {
-                    KeyCode::Char(':') => {
-                        // Start typing command
-                        command_input.push(':');
-                    }
-                    KeyCode::Char(c) if command_input.starts_with(':') => {
-                        // Continue typing command
-                        command_input.push(c);
-                    }
-                    KeyCode::Enter if command_input.starts_with(':') => {
-                        // Handle command input here
-                        command_input.clear();
-                    }
                     KeyCode::Tab => {
                         // Switch view with Tab key
                         active_view = (active_view + 1) % views.len();
                     }
-                    KeyCode::Char('1') => active_view = 0, // Shortcut for Contexts
-                    KeyCode::Char('2') => active_view = 1, // Shortcut for Sessions
-                    KeyCode::Char('3') => active_view = 2, // Shortcut for Patterns
-                    KeyCode::Char('4') => active_view = 3, // Shortcut for Vendors
-                    KeyCode::Char('5') => active_view = 4, // Shortcut for Models
-                    KeyCode::Down if active_view == 0 => {
-                        // Navigate down in the file list
-                        if selected_context < context_files.len() - 1 {
-                            selected_context += 1;
-                            list_state.select(Some(selected_context));
-                            if let Ok(content) = fs::read_to_string(context_files[selected_context]) {
-                                file_content = content;
-                            }
-                        }
+                    KeyCode::Char('1') => active_view = 0,
+                    KeyCode::Char('2') => active_view = 1,
+                    KeyCode::Char('3') => active_view = 2,
+                    KeyCode::Char('4') => active_view = 3,
+                    KeyCode::Char('5') => active_view = 4,
+                    KeyCode::Char('a') if views[active_view] == "Providers" => {
+                        // Handle Add action for Providers
+                        println!("Add action triggered"); // Debugging line
                     }
-                    KeyCode::Up if active_view == 0 => {
-                        // Navigate up in the file list
-                        if selected_context > 0 {
-                            selected_context -= 1;
-                            list_state.select(Some(selected_context));
-                            if let Ok(content) = fs::read_to_string(context_files[selected_context]) {
-                                file_content = content;
-                            }
-                        }
+                    KeyCode::Char('e') if views[active_view] == "Providers" => {
+                        // Handle Edit action for Providers
+                        println!("Edit action triggered"); // Debugging line
+                    }
+                    KeyCode::Char('d') if views[active_view] == "Providers" => {
+                        // Handle Delete action for Providers
+                        println!("Delete action triggered"); // Debugging line
                     }
                     KeyCode::Esc => {
                         // Exit on escape key
