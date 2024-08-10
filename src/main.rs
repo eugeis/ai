@@ -2,7 +2,7 @@ use ratatui::{
     backend::{Backend, CrosstermBackend},
     layout::{Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
-    text::{Span, Line, Text},
+    text::{Span, Line},
     widgets::{Block, Borders, List, ListItem, Paragraph, ListState},
     Terminal,
 };
@@ -91,12 +91,13 @@ fn main() -> Result<(), io::Error> {
 
     // Application state
     let mut command_input = String::new();
+    let mut info_message = String::new(); // Add info_message to store information messages
     let views = ["Contexts", "Sessions", "Patterns", "Providers", "Models"];
-    let mut active_view = 3; // Start with Providers view selected
+    let mut active_view = 0; // Start with the first view selected
     let context_files = vec!["file1.txt", "file2.txt", "file3.txt"]; // Replace with actual file names
     let mut selected_context = 0;
-    let mut list_state = ListState::default(); // Initialize ListState
-    list_state.select(Some(selected_context));
+    let mut context_list_state = ListState::default(); // Initialize ListState for contexts
+    context_list_state.select(Some(selected_context));
     let mut file_content = String::new();
     if let Ok(content) = fs::read_to_string(context_files[selected_context]) {
         file_content = content;
@@ -117,6 +118,9 @@ fn main() -> Result<(), io::Error> {
         },
     );
 
+    let mut provider_list_state = ListState::default(); // Initialize ListState for providers
+    provider_list_state.select(Some(0));
+
     loop {
         // Clone necessary data before entering the closure
         let editing_provider = app_state.editing_provider.clone();
@@ -127,51 +131,47 @@ fn main() -> Result<(), io::Error> {
         let provider_names_vec = app_state.get_provider_names();
 
         terminal.draw(|f| {
-            // Layout setup
+            let constraints: Vec<Constraint> = vec![
+                Constraint::Length(1), // Header (always allocate space)
+                Constraint::Length(1), // Actions (only for Providers)
+                Constraint::Length(3), // Command line
+                Constraint::Min(0),    // Working space
+            ];
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
-                .constraints(
-                    [
-                        Constraint::Length(3), // Header and Actions
-                        Constraint::Length(3), // Command line
-                        Constraint::Min(0),    // Working space
-                    ]
-                        .as_ref(),
-                )
+                .constraints(constraints.as_slice()) // Explicitly specify type
                 .split(f.size());
 
-            // Header and Actions
-            let header_actions_line = Line::from(
-                views.iter().enumerate().flat_map(|(i, view)| {
-                    let mut spans = vec![Span::styled(
-                        format!("({}) {}", i + 1, view),
-                        if i == active_view {
-                            Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
-                        } else {
-                            Style::default()
-                        },
-                    )];
-                    if i == active_view && views[active_view] == "Providers" {
-                        let actions = vec![
-                            Span::styled(" [a] Add ", Style::default().fg(Color::Green)),
-                            Span::styled(" [e] Edit ", Style::default().fg(Color::Green)),
-                            Span::styled(" [d] Delete ", Style::default().fg(Color::Green)),
-                        ];
-                        spans.push(Span::raw(" | "));
-                        spans.extend(actions);
-                    }
-                    spans
-                }).collect::<Vec<_>>(),
-            );
-            let header_actions = Paragraph::new(header_actions_line)
-                .block(Block::default().borders(Borders::ALL).title("Header & Actions"));
-            f.render_widget(header_actions, chunks[0]);
+            // Header
+            let header_spans: Vec<Span> = views.iter().enumerate().map(|(i, view)| {
+                Span::styled(
+                    format!("({}) {} ", i + 1, view),
+                    if i == active_view {
+                        Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default()
+                    },
+                )
+            }).collect();
+            let header_line = Line::from(header_spans);
+            let header = Paragraph::new(header_line);
+            f.render_widget(header, chunks[0]);
 
-            // Command Line
-            let command_line = Paragraph::new(Text::raw(command_input.as_str()))
-                .style(Style::default().fg(Color::Green))
-                .block(Block::default().borders(Borders::ALL).title(": Command Line"));
-            f.render_widget(command_line, chunks[1]);
+            // Actions (only for Providers view)
+            if views[active_view] == "Providers" {
+                let actions_line = Line::from(vec![
+                    Span::styled(" [a] Add ", Style::default().fg(Color::Green)),
+                    Span::styled(" [e] Edit ", Style::default().fg(Color::Green)),
+                    Span::styled(" [d] Delete ", Style::default().fg(Color::Green)),
+                ]);
+                let actions = Paragraph::new(actions_line);
+                f.render_widget(actions, chunks[1]);
+            }
+
+            // Command Line / Info Area
+            let command_line = Paragraph::new(Span::styled(info_message.as_str(), Style::default().fg(Color::Green)))
+                .block(Block::default().borders(Borders::ALL).title("Info / Command"));
+            f.render_widget(command_line, chunks[chunks.len() - 2]);
 
             // Workspace
             match views[active_view] {
@@ -185,7 +185,7 @@ fn main() -> Result<(), io::Error> {
                             ]
                                 .as_ref(),
                         )
-                        .split(chunks[2]);
+                        .split(chunks[chunks.len() - 1]);
 
                     // Left column: File list
                     let items: Vec<ListItem> = context_files.iter().map(|f| {
@@ -196,7 +196,7 @@ fn main() -> Result<(), io::Error> {
                         .block(Block::default().borders(Borders::ALL).title("Contexts"))
                         .highlight_style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
                         .highlight_symbol(">> ");
-                    f.render_stateful_widget(list, cols[0], &mut list_state);
+                    f.render_stateful_widget(list, cols[0], &mut context_list_state);
 
                     // Right column: File content
                     let file_view = Paragraph::new(file_content.as_str())
@@ -225,7 +225,7 @@ fn main() -> Result<(), io::Error> {
                             .highlight_style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
                             .highlight_symbol(">> ");
 
-                        f.render_stateful_widget(provider_list, chunks[2], &mut list_state);
+                        f.render_stateful_widget(provider_list, chunks[chunks.len() - 1], &mut provider_list_state);
                     } else if let Some(ref editing_name) = editing_provider {
                         let provider = provider_instances.get(editing_name).cloned();
                         let settings = provider_settings.get(editing_name).cloned();
@@ -250,7 +250,7 @@ fn main() -> Result<(), io::Error> {
                                 .highlight_style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
                                 .highlight_symbol(">> ");
 
-                            f.render_stateful_widget(provider_list, chunks[2], &mut list_state);
+                            f.render_stateful_widget(provider_list, chunks[chunks.len() - 1], &mut provider_list_state);
                         }
                     } else if let Some(ref deleting_name) = deleting_provider {
                         let items: Vec<ListItem> = provider_names_vec
@@ -263,7 +263,7 @@ fn main() -> Result<(), io::Error> {
                             .highlight_style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
                             .highlight_symbol(">> ");
 
-                        f.render_stateful_widget(provider_list, chunks[2], &mut list_state);
+                        f.render_stateful_widget(provider_list, chunks[chunks.len() - 1], &mut provider_list_state);
                     } else {
                         let provider_names: Vec<ListItem> = provider_names_vec
                             .iter()
@@ -275,13 +275,13 @@ fn main() -> Result<(), io::Error> {
                             .highlight_style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
                             .highlight_symbol(">> ");
 
-                        f.render_widget(provider_list, chunks[2]);
+                        f.render_stateful_widget(provider_list, chunks[chunks.len() - 1], &mut provider_list_state);
                     }
                 }
                 _ => {
                     let workspace = Paragraph::new(format!("This is the {} view", views[active_view]))
                         .block(Block::default().borders(Borders::ALL).title("Workspace"));
-                    f.render_widget(workspace, chunks[2]);
+                    f.render_widget(workspace, chunks[chunks.len() - 1]);
                 }
             };
         })?;
@@ -316,72 +316,99 @@ fn main() -> Result<(), io::Error> {
                     KeyCode::Char('a') if active_view == 3 => {
                         // Handle Add Provider action
                         app_state.adding_provider = true;
-                        list_state.select(Some(0));
-                        println!("Add Provider action triggered");
+                        provider_list_state.select(Some(0));
+                        info_message = "Add Provider action triggered".to_string();
                     }
                     KeyCode::Char('e') if active_view == 3 => {
                         // Handle Edit Provider action
-                        if let Some(selected) = list_state.selected() {
+                        if let Some(selected) = provider_list_state.selected() {
                             let provider_names = app_state.get_provider_names();
                             if selected < provider_names.len() {
                                 app_state.editing_provider = Some(provider_names[selected].clone());
-                                println!("Edit Provider action triggered for {}", provider_names[selected]);
+                                info_message = format!("Edit Provider action triggered for {}", provider_names[selected]);
                             }
                         }
                     }
                     KeyCode::Char('d') if active_view == 3 => {
                         // Handle Delete Provider action
-                        if let Some(selected) = list_state.selected() {
+                        if let Some(selected) = provider_list_state.selected() {
                             let provider_names = app_state.get_provider_names();
                             if selected < provider_names.len() {
                                 app_state.deleting_provider = Some(provider_names[selected].clone());
-                                println!("Delete Provider action triggered for {}", provider_names[selected]);
+                                info_message = format!("Delete Provider action triggered for {}", provider_names[selected]);
                             }
                         }
                     }
 
-                    KeyCode::Down if active_view == 3 && app_state.adding_provider => {
-                        // Navigate down in the provider type selection
-                        if selected_context < 5 {
-                            selected_context += 1;
-                            list_state.select(Some(selected_context));
+                    KeyCode::Down if active_view == 3 => {
+                        if app_state.adding_provider {
+                            // Navigate down in the provider type selection
+                            let provider_types_count = 6; // Number of provider types
+                            if let Some(selected) = provider_list_state.selected() {
+                                if selected < provider_types_count - 1 {
+                                    provider_list_state.select(Some(selected + 1));
+                                }
+                            } else {
+                                provider_list_state.select(Some(0));
+                            }
+                        } else {
+                            // Navigate down in the provider list
+                            if let Some(selected) = provider_list_state.selected() {
+                                if selected < provider_names_vec.len() - 1 {
+                                    provider_list_state.select(Some(selected + 1));
+                                }
+                            } else {
+                                provider_list_state.select(Some(0));
+                            }
                         }
                     }
-                    KeyCode::Up if active_view == 3 && app_state.adding_provider => {
-                        // Navigate up in the provider type selection
-                        if selected_context > 0 {
-                            selected_context -= 1;
-                            list_state.select(Some(selected_context));
+                    KeyCode::Up if active_view == 3 => {
+                        if app_state.adding_provider {
+                            // Navigate up in the provider type selection
+                            if let Some(selected) = provider_list_state.selected() {
+                                if selected > 0 {
+                                    provider_list_state.select(Some(selected - 1));
+                                }
+                            }
+                        } else {
+                            // Navigate up in the provider list
+                            if let Some(selected) = provider_list_state.selected() {
+                                if selected > 0 {
+                                    provider_list_state.select(Some(selected - 1));
+                                }
+                            }
                         }
                     }
                     KeyCode::Enter if active_view == 3 && app_state.adding_provider => {
                         // Finalize provider type selection and transition to provider settings
-                        let selected_type = match selected_context {
-                            0 => ProviderType::OpenAI,
-                            1 => ProviderType::Ollama,
-                            2 => ProviderType::AzureOpenAI,
-                            3 => ProviderType::Gemini,
-                            4 => ProviderType::Grog,
-                            5 => ProviderType::Claude,
-                            _ => ProviderType::OpenAI,
-                        };
+                        if let Some(selected) = provider_list_state.selected() {
+                            let selected_type = match selected {
+                                0 => ProviderType::OpenAI,
+                                1 => ProviderType::Ollama,
+                                2 => ProviderType::AzureOpenAI,
+                                3 => ProviderType::Gemini,
+                                4 => ProviderType::Grog,
+                                5 => ProviderType::Claude,
+                                _ => ProviderType::OpenAI,
+                            };
 
-                        // Create a new provider instance and settings
-                        let new_provider = ProviderInstance {
-                            name: format!("Provider{}", app_state.provider_instances.len() + 1),
-                            provider_type: selected_type.clone(),
-                        };
+                            // Create a new provider instance and settings
+                            let new_provider = ProviderInstance {
+                                name: format!("Provider{}", app_state.provider_instances.len() + 1),
+                                provider_type: selected_type.clone(),
+                            };
 
-                        let new_settings = ProviderSettings {
-                            api_key: Some("your_api_key".to_string()),
-                            api_entry_point: Some("https://api.example.com".to_string()),
-                            api_deployment: Some("your_deployment".to_string()),
-                        };
+                            let new_settings = ProviderSettings {
+                                api_key: Some("your_api_key".to_string()),
+                                api_entry_point: Some("https://api.example.com".to_string()),
+                                api_deployment: Some("your_deployment".to_string()),
+                            };
 
-                        // Add the new provider
-                        app_state.add_provider(new_provider, new_settings);
-                        app_state.adding_provider = false;
-                        println!("Added new provider of type {:?}", selected_type);
+                            // Add the new provider
+                            app_state.add_provider(new_provider, new_settings);
+                            app_state.adding_provider = false;
+                            info_message = format!("Added new provider of type {:?}", selected_type);
+                        }
                     }
 
                     KeyCode::Enter if active_view == 3 && app_state.editing_provider.is_some() => {
@@ -404,7 +431,7 @@ fn main() -> Result<(), io::Error> {
 
                                 app_state.edit_provider(&editing_name, updated_provider, updated_settings);
                                 app_state.editing_provider = None;
-                                println!("Edited provider {}", editing_name);
+                                info_message = format!("Edited provider {}", editing_name);
                             }
                         }
                     }
@@ -414,7 +441,7 @@ fn main() -> Result<(), io::Error> {
                         if let Some(deleting_name) = app_state.deleting_provider.clone() {
                             app_state.remove_provider(&deleting_name);
                             app_state.deleting_provider = None;
-                            println!("Deleted provider {}", deleting_name);
+                            info_message = format!("Deleted provider {}", deleting_name);
                         }
                     }
 
@@ -422,7 +449,7 @@ fn main() -> Result<(), io::Error> {
                         // Navigate down in the file list
                         if selected_context < context_files.len() - 1 {
                             selected_context += 1;
-                            list_state.select(Some(selected_context));
+                            context_list_state.select(Some(selected_context));
                             if let Ok(content) = fs::read_to_string(context_files[selected_context]) {
                                 file_content = content;
                             }
@@ -432,7 +459,7 @@ fn main() -> Result<(), io::Error> {
                         // Navigate up in the file list
                         if selected_context > 0 {
                             selected_context -= 1;
-                            list_state.select(Some(selected_context));
+                            context_list_state.select(Some(selected_context));
                             if let Ok(content) = fs::read_to_string(context_files[selected_context]) {
                                 file_content = content;
                             }
