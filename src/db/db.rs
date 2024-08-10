@@ -9,10 +9,9 @@ use crate::db::storage::Storage;
 #[derive(Debug)]
 pub struct Db {
     dir: PathBuf,
-    patterns: Patterns,
-    sessions: Sessions,
-    contexts: Contexts,
-    env_file_path: PathBuf,
+    pub patterns: Patterns,
+    pub sessions: Sessions,
+    pub contexts: Contexts,
 }
 
 impl Db {
@@ -53,7 +52,6 @@ impl Db {
             patterns,
             sessions,
             contexts,
-            env_file_path,
         })
     }
 
@@ -62,15 +60,6 @@ impl Db {
         self.patterns.configure()?;
         self.sessions.configure()?;
         self.contexts.configure()?;
-        Ok(())
-    }
-
-    pub fn is_env_file_exists(&self) -> bool {
-        self.env_file_path.exists()
-    }
-
-    pub fn save_env(&self, content: &str) -> Result<(), io::Error> {
-        fs::write(&self.env_file_path, content.as_bytes())?;
         Ok(())
     }
 

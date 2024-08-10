@@ -3,7 +3,7 @@ use crate::db::storage::Storage;
 
 #[derive(Debug)]
 pub struct Contexts {
-    storage: Storage,
+    pub storage: Storage,
 }
 
 impl Contexts {

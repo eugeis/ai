@@ -1,8 +1,7 @@
 use std::{
-    collections::HashMap,
-    fs::{self, File, OpenOptions},
+    fs::{self, File},
     io::{self, Read, Write},
-    path::{Path, PathBuf},
+    path::{PathBuf},
 };
 use crate::db::sessions::Message;
 
