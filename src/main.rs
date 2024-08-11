@@ -1,4 +1,3 @@
-mod db;
 
 use ratatui::{
     backend::{Backend, CrosstermBackend},
